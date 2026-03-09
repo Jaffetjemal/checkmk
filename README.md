@@ -1,0 +1,1 @@
+checkmk on synology nas
