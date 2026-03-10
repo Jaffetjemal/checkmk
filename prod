@@ -4,6 +4,7 @@ services:
   checkmk-raw:
     image: "checkmk/check-mk-raw:latest"
     container_name: "checkmk"
+    hostname: checkmk-monitoring
     environment:
       #- CMK_PASSWORD=mypassword
       #- MAIL_RELAY_HOST=mailrelay.example.com
@@ -15,17 +16,23 @@ services:
     deploy:
       resources:
         limits:
-          # cpus: '2' # Synology und TerraMaster bestätigen, dass ihre Kernel keine Docker‑CPU‑Limits unterstützen.
+          #cpus: '2' #  Synology und TerraMaster bestätigen, dass ihre Kernel keine Docker‑CPU‑Limits unterstützen./Kernel unterstützt keine CFS‑CPU‑Kontrolle 
           memory: 4g
     
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     
     volumes:
       - /volume1/docker/checkmk:/omd/sites
-      #- /volume1/docker/checkmk/backups:/backup
+      - /volume1/docker/checkmk/backups:/backup
       - /etc/localtime:/etc/localtime:ro
     
     tmpfs:
@@ -34,11 +41,19 @@ services:
       #- /tmp:rw,noexec,nosuid,size=512m
     
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/cmk/check_mk/login.py"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://localhost:5000/cmk/check_mk/login.py &&
+           omd status cmk | grep -q running &&
+           pgrep -f nagios &&
+           pgrep apache2 &&
+           df /omd/sites/cmk | awk 'NR==2 {exit !($4>100000)}'"
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 120s
     
     ports:
       - 8722:5000
@@ -52,10 +67,11 @@ services:
 
 volumes:
   checkmk:
+  backups:
 
 # --hostname 'mymonitoring.mydomain.com'.
 
-#capabilities fuer tmpfs
+# capabilities fuer tmpfs
 
 # volumes aus folders mit git drunter
 # local/share/check_mk oder local/share generell
